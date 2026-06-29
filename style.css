@@ -771,3 +771,95 @@ body::after {
   pointer-events: none;
   z-index: 0;
 }
+
+/* ===== ADMIN PANEL ===== */
+.admin-dates-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 600px) {
+  .admin-dates-grid { grid-template-columns: 1fr; }
+}
+
+.admin-add-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.admin-nda-label {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .85rem;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.admin-subject-block {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.admin-sub-header {
+  padding: .5rem 1rem;
+  font-weight: 600;
+  font-size: .85rem;
+  letter-spacing: .03em;
+}
+
+.admin-chap-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: .82rem;
+  flex-wrap: wrap;
+}
+.admin-chap-row:last-child { border-bottom: none; }
+
+.admin-custom-row {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.admin-chap-name {
+  flex: 1;
+  font-weight: 500;
+  min-width: 120px;
+  color: var(--text);
+}
+
+.admin-del-btn {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 4px;
+  padding: .15rem .5rem;
+  font-size: .72rem;
+  cursor: pointer;
+  font-family: var(--font);
+  white-space: nowrap;
+  transition: background .15s;
+}
+.admin-del-btn:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.formula-expr-mini {
+  font-family: var(--mono);
+  font-size: .75rem;
+  color: var(--text-3);
+  background: var(--bg-2);
+  padding: .1rem .4rem;
+  border-radius: 3px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

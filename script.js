@@ -52,13 +52,8 @@ function getSubjectColor(sub) {
   if (sub==='Maths') return 'math';
   return '';
 }
-function allChaps() {
-  return [
-    ...CHAPTERS.Physics.map(c=>({...c,subject:'Physics'})),
-    ...CHAPTERS.Chemistry.map(c=>({...c,subject:'Chemistry'})),
-    ...CHAPTERS.Maths.map(c=>({...c,subject:'Maths'})),
-  ];
-}
+// allChaps() is defined in the Admin section below (uses getEffectiveChapters)
+function _allChaps_original_replaced() {}
 
 // ===== STREAK =====
 function updateStreak() {
@@ -141,13 +136,14 @@ function getRevisionStatus(chapId) {
 
 // ===== PROGRESS =====
 function getProgress() {
+  const EC = getEffectiveChapters();
   const all = allChaps();
   const total = all.length;
   const done = all.filter(c=>state.completed[c.id]).length;
   const pct = total ? Math.round(done/total*100) : 0;
   const bySubject = {};
   for (const sub of ['Physics','Chemistry','Maths']) {
-    const sChaps = CHAPTERS[sub];
+    const sChaps = EC[sub];
     const sDone = sChaps.filter(c=>state.completed[c.id]).length;
     bySubject[sub] = { done: sDone, total: sChaps.length, pct: sChaps.length ? Math.round(sDone/sChaps.length*100) : 0 };
   }
@@ -248,13 +244,13 @@ function renderDashboard() {
   }).join('');
 
   // Countdown
-  const diff = daysBetween(today(), NDA_EXAM_DATE.toISOString().split('T')[0]);
+  const diff = daysBetween(today(), getEffectiveExamDate());
   document.getElementById('countdownDays').textContent = diff > 0 ? diff : 'Past';
 }
 
 // ===== TIMETABLE PAGE =====
 function renderTimetable() {
-  const startDate = '2025-06-28';
+  const startDate = getEffectiveStartDate();
   const current = addDays(startDate, state.weekOffset * 7);
   const weekNum = state.weekOffset + 1;
 
@@ -326,7 +322,7 @@ function renderChapters() {
   const grid = document.getElementById('chaptersGrid');
 
   grid.innerHTML = subjects.map(sub=>{
-    const chaps = CHAPTERS[sub];
+    const chaps = getEffectiveChapters()[sub];
     const done = chaps.filter(c=>state.completed[c.id]).length;
     const pct = Math.round(done/chaps.length*100);
     const color = getSubjectColor(sub);
@@ -426,7 +422,7 @@ function renderAnalytics() {
     document.getElementById(`${key}Bar`).style.width = data.pct+'%';
     document.getElementById(`${key}Pct`).textContent = data.pct+'%';
 
-    const chaps = CHAPTERS[sub];
+    const chaps = getEffectiveChapters()[sub];
     const barsEl = document.getElementById(`${key}ChapBars`);
     barsEl.innerHTML = chaps.map(c=>{
       const done = state.completed[c.id]?100:0;
@@ -536,7 +532,7 @@ function deleteMock(i) {
 // ===== FORMULAS =====
 function renderFormulas() {
   const q = (state.formulaFilter||'').toLowerCase();
-  const filtered = FORMULAS.filter(f=>
+  const filtered = getEffectiveFormulas().filter(f=>
     !q || f.name.toLowerCase().includes(q) || f.subject.toLowerCase().includes(q) || f.chapter.toLowerCase().includes(q)
   );
   const grid = document.getElementById('formulasGrid');
@@ -590,6 +586,7 @@ function navigate(page) {
   if (page==='timetable') renderTimetable();
   if (page==='mock') renderMockTests();
   if (page==='formulas') renderFormulas();
+  if (page==='admin') renderAdmin();
 
   // Close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
@@ -674,3 +671,267 @@ document.addEventListener('DOMContentLoaded', ()=>{
   renderTimetable();
   navigate('dashboard');
 });
+
+// ===== ADMIN PANEL =====
+
+// --- Runtime overrides: custom chapters & formulas stored in state ---
+// state.customChapters = { Physics: [...], Chemistry: [...], Maths: [...] }
+// state.deletedChapters = ['ph1', 'ch3', ...]  (ids of default chapters removed)
+// state.customFormulas = [...]
+// state.deletedFormulas = ['Physics_Biot-Savart Law', ...]
+// state.adminStartDate = 'YYYY-MM-DD'
+// state.adminExamDate  = 'YYYY-MM-DD'
+
+function getEffectiveChapters() {
+  // Returns merged CHAPTERS (defaults minus deleted, plus custom)
+  const result = {};
+  for (const sub of ['Physics', 'Chemistry', 'Maths']) {
+    const defaults = (CHAPTERS[sub] || []).filter(c => !(state.deletedChapters || []).includes(c.id));
+    const custom   = (state.customChapters || {})[sub] || [];
+    result[sub] = [...defaults, ...custom];
+  }
+  return result;
+}
+
+function getEffectiveFormulas() {
+  const deleted = state.deletedFormulas || [];
+  const defaults = FORMULAS.filter(f => !deleted.includes(f.subject + '_' + f.name));
+  const custom   = state.customFormulas || [];
+  return [...defaults, ...custom];
+}
+
+function getEffectiveStartDate() {
+  return state.adminStartDate || '2025-06-28';
+}
+
+function getEffectiveExamDate() {
+  return state.adminExamDate || NDA_EXAM_DATE.toISOString().split('T')[0];
+}
+
+// --- Patch allChaps to use effective chapters ---
+function allChaps() {
+  const EC = getEffectiveChapters();
+  return [
+    ...EC.Physics.map(c  => ({ ...c, subject: 'Physics' })),
+    ...EC.Chemistry.map(c => ({ ...c, subject: 'Chemistry' })),
+    ...EC.Maths.map(c    => ({ ...c, subject: 'Maths' })),
+  ];
+}
+
+// --- Render Admin Page ---
+function renderAdmin() {
+  // Set date inputs
+  document.getElementById('adminStartDate').value = getEffectiveStartDate();
+  document.getElementById('adminExamDate').value  = getEffectiveExamDate();
+
+  renderAdminChapters();
+  renderAdminFormulas();
+}
+
+function renderAdminChapters() {
+  const EC = getEffectiveChapters();
+  const deleted = state.deletedChapters || [];
+  const listEl = document.getElementById('adminChaptersList');
+
+  let html = '';
+  for (const sub of ['Physics', 'Chemistry', 'Maths']) {
+    const icon = sub === 'Physics' ? '⚛️' : sub === 'Chemistry' ? '🧪' : '📐';
+    const col  = getSubjectColor(sub);
+
+    // Default chapters (those not yet deleted)
+    const defaultChaps = (CHAPTERS[sub] || []).filter(c => !deleted.includes(c.id));
+    // Custom chapters
+    const customChaps  = (state.customChapters || {})[sub] || [];
+
+    html += `<div class="admin-subject-block">
+      <div class="admin-sub-header ${col}-bg">${icon} ${sub} <span style="font-size:.75rem;opacity:.8">(${defaultChaps.length + customChaps.length} chapters)</span></div>`;
+
+    for (const c of defaultChaps) {
+      html += `<div class="admin-chap-row">
+        <span class="admin-chap-name">${c.name}</span>
+        <span class="chap-badge badge-${c.importance}">${c.importance}</span>
+        ${c.nda ? '<span class="chap-badge badge-nda">NDA</span>' : ''}
+        <span style="color:var(--text-3);font-size:.78rem">~${c.hours}h</span>
+        <button class="admin-del-btn" onclick="adminDeleteDefaultChapter('${c.id}','${sub}')">✕ Remove</button>
+      </div>`;
+    }
+
+    for (let i = 0; i < customChaps.length; i++) {
+      const c = customChaps[i];
+      html += `<div class="admin-chap-row admin-custom-row">
+        <span class="admin-chap-name">★ ${c.name}</span>
+        <span class="chap-badge badge-${c.importance}">${c.importance}</span>
+        ${c.nda ? '<span class="chap-badge badge-nda">NDA</span>' : ''}
+        <span style="color:var(--text-3);font-size:.78rem">~${c.hours}h</span>
+        <button class="admin-del-btn" onclick="adminDeleteCustomChapter('${sub}',${i})">✕ Remove</button>
+      </div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  listEl.innerHTML = html;
+}
+
+function renderAdminFormulas() {
+  const effective = getEffectiveFormulas();
+  const deletedFrm = state.deletedFormulas || [];
+  const listEl = document.getElementById('adminFormulasList');
+
+  const defaultIds = new Set(FORMULAS.map(f => f.subject + '_' + f.name));
+
+  let html = '';
+  for (const sub of ['Physics', 'Chemistry', 'Maths']) {
+    const icon = sub === 'Physics' ? '⚛️' : sub === 'Chemistry' ? '🧪' : '📐';
+    const col  = getSubjectColor(sub);
+    const subFormulas = effective.filter(f => f.subject === sub);
+
+    html += `<div class="admin-subject-block">
+      <div class="admin-sub-header ${col}-bg">${icon} ${sub} <span style="font-size:.75rem;opacity:.8">(${subFormulas.length})</span></div>`;
+
+    for (const f of subFormulas) {
+      const key = f.subject + '_' + f.name;
+      const isCustom = !defaultIds.has(key);
+      html += `<div class="admin-chap-row ${isCustom ? 'admin-custom-row' : ''}">
+        <span class="admin-chap-name">${isCustom ? '★ ' : ''}${f.name}</span>
+        <span style="color:var(--text-3);font-size:.75rem">${f.chapter}</span>
+        <span class="formula-expr-mini">${f.expr}</span>
+        <button class="admin-del-btn" onclick="adminDeleteFormula('${key.replace(/'/g, "\\'")}')">✕ Remove</button>
+      </div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  listEl.innerHTML = html;
+}
+
+// --- Save Dates ---
+function saveDates() {
+  const start = document.getElementById('adminStartDate').value;
+  const exam  = document.getElementById('adminExamDate').value;
+  if (!start || !exam) { showToast('⚠️ Please fill both dates.'); return; }
+  state.adminStartDate = start;
+  state.adminExamDate  = exam;
+  saveState();
+  renderAll();
+  renderTimetable();
+  showToast('📅 Dates saved!');
+}
+
+// --- Add Chapter ---
+function adminAddChapter() {
+  const sub  = document.getElementById('adminChapSubject').value;
+  const name = document.getElementById('adminChapName').value.trim();
+  const hours = parseInt(document.getElementById('adminChapHours').value) || 4;
+  const importance = document.getElementById('adminChapImportance').value;
+  const nda  = document.getElementById('adminChapNDA').checked;
+
+  if (!name) { showToast('⚠️ Chapter name is required.'); return; }
+
+  if (!state.customChapters) state.customChapters = { Physics: [], Chemistry: [], Maths: [] };
+  if (!state.customChapters[sub]) state.customChapters[sub] = [];
+
+  // Check duplicate
+  const EC = getEffectiveChapters();
+  if (EC[sub].some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    showToast('⚠️ Chapter already exists!'); return;
+  }
+
+  const id = 'custom_' + sub.slice(0,2).toLowerCase() + '_' + Date.now();
+  state.customChapters[sub].push({ id, name, hours, importance, nda });
+  saveState();
+
+  // Clear inputs
+  document.getElementById('adminChapName').value = '';
+  document.getElementById('adminChapHours').value = '4';
+  document.getElementById('adminChapNDA').checked = false;
+
+  renderAdmin();
+  renderAll();
+  showToast(`✅ "${name}" added to ${sub}!`);
+}
+
+// --- Delete Default Chapter ---
+function adminDeleteDefaultChapter(id, sub) {
+  if (!confirm('Remove this chapter from the tracker? (You can restore it by reloading if needed, but saved progress stays.)')) return;
+  if (!state.deletedChapters) state.deletedChapters = [];
+  if (!state.deletedChapters.includes(id)) state.deletedChapters.push(id);
+  saveState();
+  renderAdmin();
+  renderAll();
+  showToast('🗑️ Chapter removed.');
+}
+
+// --- Delete Custom Chapter ---
+function adminDeleteCustomChapter(sub, index) {
+  if (!confirm('Delete this custom chapter?')) return;
+  state.customChapters[sub].splice(index, 1);
+  saveState();
+  renderAdmin();
+  renderAll();
+  showToast('🗑️ Custom chapter deleted.');
+}
+
+// --- Add Formula ---
+function adminAddFormula() {
+  const subject = document.getElementById('adminFrmSubject').value;
+  const chapter = document.getElementById('adminFrmChapter').value.trim();
+  const name    = document.getElementById('adminFrmName').value.trim();
+  const expr    = document.getElementById('adminFrmExpr').value.trim();
+
+  if (!chapter || !name || !expr) { showToast('⚠️ Please fill all formula fields.'); return; }
+
+  const key = subject + '_' + name;
+  const existing = getEffectiveFormulas();
+  if (existing.some(f => f.subject === subject && f.name === name)) {
+    showToast('⚠️ Formula with this name already exists!'); return;
+  }
+
+  if (!state.customFormulas) state.customFormulas = [];
+  state.customFormulas.push({ subject, chapter, name, expr });
+  saveState();
+
+  document.getElementById('adminFrmChapter').value = '';
+  document.getElementById('adminFrmName').value = '';
+  document.getElementById('adminFrmExpr').value = '';
+
+  renderAdmin();
+  renderFormulas();
+  showToast(`🔬 Formula "${name}" added!`);
+}
+
+// --- Delete Formula ---
+function adminDeleteFormula(key) {
+  if (!confirm('Remove this formula?')) return;
+  const defaultIds = new Set(FORMULAS.map(f => f.subject + '_' + f.name));
+
+  if (defaultIds.has(key)) {
+    // Mark default as deleted
+    if (!state.deletedFormulas) state.deletedFormulas = [];
+    if (!state.deletedFormulas.includes(key)) state.deletedFormulas.push(key);
+  } else {
+    // Remove from custom
+    const [sub, ...rest] = key.split('_');
+    const name = rest.join('_');
+    if (state.customFormulas) {
+      const idx = state.customFormulas.findIndex(f => f.subject === sub && f.name === name);
+      if (idx > -1) state.customFormulas.splice(idx, 1);
+    }
+  }
+  saveState();
+  renderAdmin();
+  renderFormulas();
+  showToast('🗑️ Formula removed.');
+}
+
+// --- Restore Deleted Defaults button ---
+function adminRestoreDefaults() {
+  if (!confirm('Restore all deleted default chapters and formulas?')) return;
+  state.deletedChapters = [];
+  state.deletedFormulas = [];
+  saveState();
+  renderAdmin();
+  renderAll();
+  showToast('✅ Defaults restored!');
+}

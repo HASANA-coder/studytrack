@@ -179,3 +179,7 @@ const FORMULAS = [
 
 // NDA exam date (approximate - next NDA)
 const NDA_EXAM_DATE = new Date('2025-09-14');
+
+// ===== RUNTIME OVERRIDES (set by Admin Panel via localStorage) =====
+// These will be merged in by script.js after loadState()
+// NDA_EXAM_DATE and start date are also overridable
